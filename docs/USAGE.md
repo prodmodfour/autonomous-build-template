@@ -49,13 +49,21 @@ Good tickets are:
 * clear about docs and validation
 * scoped to one change
 
-## 4. Run one cycle
+## 4. Preview script output formatting
+
+Run the mock output demo to see the coloured, delineated section style without invoking an agent, validation, git, or network commands:
+
+```bash
+scripts/mock-output.sh
+```
+
+## 5. Run one cycle
 
 ```bash
 scripts/build-loop.sh
 ```
 
-## 5. Run multiple autonomous cycles
+## 6. Run multiple autonomous cycles
 
 ```bash
 scripts/build-loop.sh --max-cycles 20
@@ -64,7 +72,7 @@ scripts/build-loop.sh --max-cycles 20
 At the start of each cycle, the loop prints the current ticket it is working on.
 The loop pushes each successful cycle's commit by default.
 
-## 6. Run without pushing
+## 7. Run without pushing
 
 ```bash
 scripts/build-loop.sh --max-cycles 20 --no-push
@@ -72,7 +80,7 @@ scripts/build-loop.sh --max-cycles 20 --no-push
 
 The legacy `--push` flag is still accepted, but pushing is already enabled by default.
 
-## 7. If branch is already ahead
+## 8. If branch is already ahead
 
 By default, the loop refuses to start if the branch is ahead of upstream.
 
@@ -82,7 +90,7 @@ To allow this:
 scripts/build-loop.sh --max-cycles 20 --allow-ahead
 ```
 
-## 8. Changing the agent
+## 9. Changing the agent
 
 The main build loop is agent-agnostic.
 
@@ -100,7 +108,7 @@ pi --no-session -p @AGENTS.md @PROJECT_BRIEF.md @BUILD_TICKETS.md @BUILD_NOTES.m
 
 It intentionally does not pass model or thinking-level flags.
 
-## 9. Completion
+## 10. Completion
 
 The final ticket should set the top-level status in `BUILD_TICKETS.md` to:
 
