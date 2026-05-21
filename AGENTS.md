@@ -18,16 +18,17 @@ Before making changes, read:
 When invoked by the build loop:
 
 1. Select the lowest-numbered `TODO` or `IN_PROGRESS` ticket from `BUILD_TICKETS.md`.
-2. Implement only that ticket.
-3. Do not start future tickets.
-4. Do not broaden scope.
-5. Add or update tests/validation where appropriate.
-6. Add or update docs where appropriate.
-7. Run `scripts/quality-gate.sh`.
-8. Update `BUILD_TICKETS.md`.
-9. Update `BUILD_NOTES.md`.
-10. Commit the completed ticket with a conventional commit message.
-11. Leave the working tree clean.
+2. Say what you are working on now, including the selected ticket and immediate action.
+3. Implement only that ticket.
+4. Do not start future tickets.
+5. Do not broaden scope.
+6. Add or update tests/validation where appropriate.
+7. Add or update docs where appropriate.
+8. Run `scripts/quality-gate.sh`.
+9. Update `BUILD_TICKETS.md`.
+10. Update `BUILD_NOTES.md`.
+11. Commit the completed ticket with a conventional commit message.
+12. Leave the working tree clean.
 
 ## If blocked
 

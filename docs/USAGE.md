@@ -61,6 +61,7 @@ scripts/build-loop.sh
 scripts/build-loop.sh --max-cycles 20
 ```
 
+At the start of each cycle, the loop prints the current ticket it is working on.
 The loop pushes each successful cycle's commit by default.
 
 ## 6. Run without pushing

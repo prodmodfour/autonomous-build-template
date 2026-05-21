@@ -123,6 +123,7 @@ Read AGENTS.md, PROJECT_BRIEF.md, BUILD_TICKETS.md, and BUILD_NOTES.md.
 Your task in this run:
 
 * Select the lowest-numbered TODO or IN_PROGRESS ticket from BUILD_TICKETS.md.
+* At the start of the run, print a short "Now working on ..." line naming the selected ticket and immediate action.
 * Implement only that ticket.
 * Do not start future tickets.
 * Do not broaden scope.
@@ -191,6 +192,58 @@ get_automation_status() {
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", status)
       print status
       exit
+    }
+  ' BUILD_TICKETS.md
+}
+
+get_next_ticket_summary() {
+  awk '
+    function trim(value) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      return value
+    }
+
+    function record_if_current() {
+      if (ticket_number != "" && (ticket_status == "TODO" || ticket_status == "IN_PROGRESS")) {
+        ticket_value = ticket_number + 0
+        if (!found || ticket_value < best_value) {
+          found = 1
+          best_value = ticket_value
+          best_number = ticket_number
+          best_title = ticket_title
+          best_status = ticket_status
+        }
+      }
+    }
+
+    /^##[[:space:]]+[0-9]+([[:space:]]|$)/ {
+      record_if_current()
+
+      heading = $0
+      sub(/^##[[:space:]]+/, "", heading)
+
+      ticket_number = heading
+      sub(/[[:space:]].*$/, "", ticket_number)
+
+      ticket_title = heading
+      sub(/^[0-9]+[[:space:]]+/, "", ticket_title)
+      sub(/^[-—][[:space:]]*/, "", ticket_title)
+
+      ticket_status = ""
+      next
+    }
+
+    ticket_number != "" && /^Status:/ {
+      ticket_status = $0
+      sub(/^Status:[[:space:]]*/, "", ticket_status)
+      ticket_status = trim(ticket_status)
+    }
+
+    END {
+      record_if_current()
+      if (found) {
+        printf "%s — %s (%s)\n", best_number, best_title, best_status
+      }
     }
   ' BUILD_TICKETS.md
 }
@@ -307,6 +360,14 @@ while (( cycle < MAX_CYCLES )); do
 
   cycle=$((cycle + 1))
   pp_banner "Autonomous build cycle" "$cycle/$MAX_CYCLES"
+
+  pp_section "Current work"
+  next_ticket="$(get_next_ticket_summary)"
+  if [[ -n "$next_ticket" ]]; then
+    pp_info "Now working on: ticket $next_ticket"
+  else
+    pp_warn "No TODO or IN_PROGRESS ticket found; agent will inspect BUILD_TICKETS.md."
+  fi
 
   pp_section "Pre-flight checks"
   sync_before_cycle

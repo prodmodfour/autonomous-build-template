@@ -35,11 +35,12 @@ Each autonomous cycle should:
 
 1. Read `AGENTS.md`, `PROJECT_BRIEF.md`, `BUILD_TICKETS.md`, and `BUILD_NOTES.md`.
 2. Select the lowest-numbered `TODO` or `IN_PROGRESS` ticket.
-3. Implement only that ticket.
-4. Run `scripts/quality-gate.sh`.
-5. Update tickets and notes.
-6. Commit the completed work.
-7. Leave the working tree clean.
+3. Print what it is working on now.
+4. Implement only that ticket.
+5. Run `scripts/quality-gate.sh`.
+6. Update tickets and notes.
+7. Commit the completed work.
+8. Leave the working tree clean.
 
 ## Important
 
