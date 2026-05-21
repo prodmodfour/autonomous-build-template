@@ -33,7 +33,7 @@ Options:
 --create-branch NAME
                    Create and select a new branch before running.
 --branch-start REF Start point for --create-branch. Default: HEAD.
---allow-ahead      Allow starting when branch is already ahead of upstream.
+--allow-ahead      Allow starting when branch is already ahead of upstream (default; kept for compatibility).
 --allow-template   Allow running even if PROJECT_BRIEF.md is still marked uncustomised.
 -h, --help         Show this help.
 
@@ -49,7 +49,7 @@ SELECT_BRANCH=""
 CREATE_BRANCH=""
 BRANCH_START_POINT="HEAD"
 BRANCH_START_SET=0
-ALLOW_AHEAD=0
+ALLOW_AHEAD=1
 ALLOW_TEMPLATE=0
 
 while [[ $# -gt 0 ]]; do
@@ -319,12 +319,6 @@ sync_before_cycle() {
   if (( behind_count > 0 )); then
     pp_error "Branch is behind upstream by ${behind_count} commit(s); refusing to start."
     pp_hint "Synchronise with upstream manually, then rerun the build loop."
-    exit 1
-  fi
-
-  if (( ahead_count > 0 && ALLOW_AHEAD != 1 )); then
-    pp_error "Branch is ahead of upstream by ${ahead_count} commit(s); refusing to start."
-    pp_hint "Push first, or rerun with --allow-ahead."
     exit 1
   fi
 

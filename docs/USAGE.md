@@ -144,13 +144,9 @@ The legacy `--push` flag is still accepted, but pushing is already enabled by de
 
 ## 10. If branch is already ahead
 
-By default, the loop refuses to start if the branch is ahead of upstream.
+Branches that are already ahead of upstream are allowed by default. The loop still refuses to start when the branch is behind upstream, and still stops if upstream advances during a cycle.
 
-To allow this:
-
-```bash
-scripts/build-loop.sh --max-cycles 20 --allow-ahead
-```
+The legacy `--allow-ahead` flag is still accepted for older scripts, but it is no longer required.
 
 ## 11. Changing the agent
 

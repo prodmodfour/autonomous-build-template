@@ -107,7 +107,8 @@ The build loop refuses to start if:
 * required files are missing
 * `PROJECT_BRIEF.md` is still marked as uncustomised
 * the branch is behind upstream
-* the branch is ahead of upstream unless `--allow-ahead` is passed
+
+Branches that are already ahead of upstream are allowed by default.
 
 Use `--branch NAME` to select an existing local or unique remote branch before running, or `--create-branch NAME` to create one.
 

@@ -9,7 +9,7 @@ The build loop:
 * refuses to start with a dirty working tree
 * refuses uncustomised templates by default
 * locks to avoid concurrent runs
-* checks upstream before and after each cycle
+* checks upstream before and after each cycle, while allowing branches that are already ahead of upstream
 * can select an existing branch with `--branch` or create one with `--create-branch`
 * pushes each successful cycle's commit by default unless `--no-push` is passed
 * sets upstream on first push when the current branch has no upstream but `origin` exists
