@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate-template:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check shell syntax
+        run: |
+          for script in scripts/*.sh; do
+            bash -n "$script"
+          done
+
+      - name: Run generic quality gate
+        run: bash scripts/quality-gate.sh
+
+      - name: Verify template is intentionally uncustomised
+        run: |
+          grep -Eq '^TEMPLATE_CUSTOMISED:[[:space:]]*false[[:space:]]*$' PROJECT_BRIEF.md
+
+      - name: Verify build loop refuses uncustomised template
+        run: |
+          if scripts/build-loop.sh --max-cycles 1; then
+            echo "Expected build loop to refuse uncustomised template" >&2
+            exit 1
+          fi
