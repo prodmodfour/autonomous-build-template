@@ -19,15 +19,17 @@ Each cycle:
 * runs quality gates
 * updates BUILD_NOTES.md and BUILD_TICKETS.md
 * commits the completed work
+* pushes the new commit unless --no-push is used
 * leaves the working tree clean
 
 Options:
---max-cycles N      Number of cycles to run. Default: 1.
---sleep SECONDS     Pause between successful cycles. Default: 0.
---push              Push after each successful cycle.
---allow-ahead       Allow starting when branch is already ahead of upstream.
---allow-template    Allow running even if PROJECT_BRIEF.md is still marked uncustomised.
--h, --help          Show this help.
+--max-cycles N     Number of cycles to run. Default: 1.
+--sleep SECONDS    Pause between successful cycles. Default: 0.
+--no-push          Do not push after successful cycles. By default, each new commit is pushed.
+--push             Push after successful cycles (default; kept for compatibility).
+--allow-ahead      Allow starting when branch is already ahead of upstream.
+--allow-template   Allow running even if PROJECT_BRIEF.md is still marked uncustomised.
+-h, --help         Show this help.
 
 This script intentionally does not pass a model or thinking level.
 Agent invocation is delegated to scripts/run-agent.sh.
@@ -36,7 +38,7 @@ USAGE
 
 MAX_CYCLES=1
 SLEEP_SECONDS=0
-PUSH_AFTER=0
+PUSH_AFTER=1
 ALLOW_AHEAD=0
 ALLOW_TEMPLATE=0
 
@@ -66,6 +68,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --push)
       PUSH_AFTER=1
+      shift
+      ;;
+    --no-push)
+      PUSH_AFTER=0
       shift
       ;;
     --allow-ahead)
@@ -282,7 +288,7 @@ acquire_lock
 pp_banner "Autonomous build loop"
 pp_kv "Max cycles" "$MAX_CYCLES"
 pp_kv "Sleep" "${SLEEP_SECONDS}s"
-pp_kv "Push after cycle" "$(pp_on_off "$PUSH_AFTER")"
+pp_kv "Push after commit" "$(pp_on_off "$PUSH_AFTER")"
 pp_kv "Allow ahead" "$(pp_on_off "$ALLOW_AHEAD")"
 pp_kv "Logs" "$LOG_DIR"
 

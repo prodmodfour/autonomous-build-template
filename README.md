@@ -83,7 +83,7 @@ After creating a new repo from this template:
 4. Run the build loop.
 
 ```bash
-scripts/build-loop.sh --max-cycles 40 --push
+scripts/build-loop.sh --max-cycles 40
 ```
 
 ## Safety defaults
@@ -95,6 +95,8 @@ The build loop refuses to start if:
 * `PROJECT_BRIEF.md` is still marked as uncustomised
 * the branch is behind upstream
 * the branch is ahead of upstream unless `--allow-ahead` is passed
+
+By default, the loop pushes after each successful cycle that creates a commit. Pass `--no-push` to keep commits local.
 
 The loop stops if:
 
@@ -131,10 +133,16 @@ Run one cycle:
 scripts/build-loop.sh
 ```
 
-Run many cycles and push after each successful cycle:
+Run many cycles. Each successful cycle is pushed by default:
 
 ```bash
-scripts/build-loop.sh --max-cycles 40 --push
+scripts/build-loop.sh --max-cycles 40
+```
+
+Run without pushing:
+
+```bash
+scripts/build-loop.sh --max-cycles 40 --no-push
 ```
 
 ## Template status

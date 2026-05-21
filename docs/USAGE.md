@@ -61,11 +61,15 @@ scripts/build-loop.sh
 scripts/build-loop.sh --max-cycles 20
 ```
 
-## 6. Push after each cycle
+The loop pushes each successful cycle's commit by default.
+
+## 6. Run without pushing
 
 ```bash
-scripts/build-loop.sh --max-cycles 20 --push
+scripts/build-loop.sh --max-cycles 20 --no-push
 ```
+
+The legacy `--push` flag is still accepted, but pushing is already enabled by default.
 
 ## 7. If branch is already ahead
 

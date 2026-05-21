@@ -10,6 +10,7 @@ The build loop:
 * refuses uncustomised templates by default
 * locks to avoid concurrent runs
 * checks upstream before and after each cycle
+* pushes each successful cycle's commit by default unless `--no-push` is passed
 * stops if the agent leaves uncommitted changes
 * stops if no commit is produced
 * checks only the top-level automation status
