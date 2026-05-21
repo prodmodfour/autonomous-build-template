@@ -48,7 +48,12 @@ pp_banner() {
 }
 
 pp_section() {
-  printf '\n%s▶%s %s%s%s\n' "$PP_BLUE" "$PP_RESET" "$PP_BOLD" "$*" "$PP_RESET"
+  local title="$*"
+  local rule='────────────────────────────────────────────────────────────'
+
+  printf '\n%s%s%s\n' "$PP_BLUE" "$rule" "$PP_RESET"
+  printf '%s%s▶ %s%s\n' "$PP_BLUE" "$PP_BOLD" "$title" "$PP_RESET"
+  printf '%s%s%s\n' "$PP_BLUE" "$rule" "$PP_RESET"
 }
 
 pp_step() {
