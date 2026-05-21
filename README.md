@@ -67,6 +67,9 @@ AGENTS.md              General rules for the coding agent
 PROJECT_BRIEF.md       Project-specific brief; customise before running
 BUILD_TICKETS.md       Ordered autonomous work queue
 BUILD_NOTES.md         Build state, latest notes, blockers
+CONTRIBUTING.md        Contribution guidelines
+LICENSE.md             MIT license
+SECURITY.md            Security reporting policy
 scripts/build-loop.sh           Main autonomous loop
 scripts/run-agent.sh            Agent-specific wrapper
 scripts/quality-gate.sh         Generic stack-aware validation script
@@ -149,3 +152,7 @@ scripts/build-loop.sh --max-cycles 40 --no-push
 ## Template status
 
 This repository is a template. New projects should customise the brief and tickets before running the autonomous loop.
+
+## Contributing, security, and license
+
+See `CONTRIBUTING.md` for contribution guidance, `SECURITY.md` for vulnerability reporting, and `LICENSE.md` for the MIT license.
