@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Scanning for obvious committed secrets..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/pretty-print.sh
+source "$SCRIPT_DIR/lib/pretty-print.sh"
+
+pp_step "Scanning tracked and untracked files for obvious committed secrets."
 
 fail=0
-match_file="/tmp/secret-scan-match"
+match_file="$(mktemp)"
+trap 'rm -f "$match_file"' EXIT
+
 aws_key_regex='AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}'
 private_key_regex='-----BEGIN (RSA |OPENSSH |EC |DSA |)PRIVATE KEY-----'
 secret_assignment_regex='(password|passwd|secret|token|api[_-]?key|private[_-]?key)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{16,}'
@@ -20,14 +26,16 @@ while IFS= read -r file; do
   esac
 
   if grep -nE -- "$aws_key_regex" "$file" >"$match_file" 2>/dev/null; then
-    echo "Possible AWS access key found in $file"
-    cat "$match_file"
+    pp_error "Possible AWS access key found."
+    pp_kv "File" "$file" >&2
+    cat "$match_file" >&2
     fail=1
   fi
 
   if grep -nE -- "$private_key_regex" "$file" >"$match_file" 2>/dev/null; then
-    echo "Private key material found in $file"
-    cat "$match_file"
+    pp_error "Private key material found."
+    pp_kv "File" "$file" >&2
+    cat "$match_file" >&2
     fail=1
   fi
 
@@ -37,19 +45,18 @@ while IFS= read -r file; do
         # These files contain instructional examples. Do not fail on generic documentation.
         ;;
       *)
-        echo "Possible secret assignment found in $file"
-        cat "$match_file"
+        pp_error "Possible secret assignment found."
+        pp_kv "File" "$file" >&2
+        cat "$match_file" >&2
         fail=1
         ;;
     esac
   fi
 done < <(git ls-files --cached --others --exclude-standard)
 
-rm -f "$match_file"
-
 if (( fail != 0 )); then
-  echo "Secret scan failed." >&2
+  pp_error "Secret scan failed."
   exit 1
 fi
 
-echo "No obvious secrets found."
+pp_success "No obvious secrets found."

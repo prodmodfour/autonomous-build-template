@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/pretty-print.sh
+source "$SCRIPT_DIR/lib/pretty-print.sh"
+
 usage() {
   cat <<'USAGE'
 Usage: scripts/build-loop.sh [options]
@@ -44,7 +48,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --max-cycles)
       if [[ $# -lt 2 ]]; then
-        echo "--max-cycles requires a value" >&2
+        pp_error "--max-cycles requires a value"
         usage >&2
         exit 2
       fi
@@ -53,7 +57,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --sleep)
       if [[ $# -lt 2 ]]; then
-        echo "--sleep requires a value" >&2
+        pp_error "--sleep requires a value"
         usage >&2
         exit 2
       fi
@@ -73,7 +77,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Unknown argument: $1" >&2
+      pp_error "Unknown argument: $1"
       usage >&2
       exit 2
       ;;
@@ -81,12 +85,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 if ! [[ "$MAX_CYCLES" =~ ^[0-9]+$ ]] || [[ "$MAX_CYCLES" -lt 1 ]]; then
-  echo "--max-cycles must be a positive integer" >&2
+  pp_error "--max-cycles must be a positive integer"
   exit 2
 fi
 
 if ! [[ "$SLEEP_SECONDS" =~ ^[0-9]+$ ]]; then
-  echo "--sleep must be a non-negative integer" >&2
+  pp_error "--sleep must be a non-negative integer"
   exit 2
 fi
 
@@ -97,6 +101,7 @@ REQUIRED_FILES=(
   BUILD_NOTES.md
   scripts/quality-gate.sh
   scripts/run-agent.sh
+  scripts/lib/pretty-print.sh
 )
 
 LOG_DIR=".agent/logs/build-loop"
@@ -143,14 +148,14 @@ PROMPT_EOF
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "Required command not found: $1" >&2
+    pp_error "Required command not found: $1"
     exit 127
   fi
 }
 
 require_clean_tree() {
   if [[ -n "$(git status --porcelain)" ]]; then
-    echo "Working tree is dirty; refusing to start." >&2
+    pp_error "Working tree is dirty; refusing to start."
     git status --short >&2
     exit 1
   fi
@@ -162,8 +167,8 @@ require_customised_template() {
   fi
 
   if grep -Eq '^TEMPLATE_CUSTOMISED:[[:space:]]*false[[:space:]]*$' PROJECT_BRIEF.md; then
-    echo "PROJECT_BRIEF.md is still marked TEMPLATE_CUSTOMISED: false." >&2
-    echo "Edit PROJECT_BRIEF.md for this project and set TEMPLATE_CUSTOMISED: true before running." >&2
+    pp_error "PROJECT_BRIEF.md is still marked TEMPLATE_CUSTOMISED: false."
+    pp_hint "Edit PROJECT_BRIEF.md for this project and set TEMPLATE_CUSTOMISED: true before running."
     exit 1
   fi
 }
@@ -197,7 +202,8 @@ sync_before_cycle() {
   CYCLE_UPSTREAM_HEAD=""
 
   if [[ -z "$upstream_ref" ]]; then
-    echo "No upstream configured; skipping remote sync checks."
+    pp_info "No upstream configured; skipping remote sync checks."
+    pp_success "Pre-flight checks passed."
     return 0
   fi
 
@@ -207,16 +213,21 @@ sync_before_cycle() {
   read -r behind_count ahead_count <<< "$counts"
 
   if (( behind_count > 0 )); then
-    echo "Branch is behind upstream by ${behind_count} commit(s); refusing to start." >&2
-    echo "Synchronise with upstream manually, then rerun the build loop." >&2
+    pp_error "Branch is behind upstream by ${behind_count} commit(s); refusing to start."
+    pp_hint "Synchronise with upstream manually, then rerun the build loop."
     exit 1
   fi
 
   if (( ahead_count > 0 && ALLOW_AHEAD != 1 )); then
-    echo "Branch is ahead of upstream by ${ahead_count} commit(s); refusing to start." >&2
-    echo "Push first, or rerun with --allow-ahead." >&2
+    pp_error "Branch is ahead of upstream by ${ahead_count} commit(s); refusing to start."
+    pp_hint "Push first, or rerun with --allow-ahead."
     exit 1
   fi
+
+  pp_kv "Upstream" "$upstream_ref"
+  pp_kv "Behind" "$behind_count commit(s)"
+  pp_kv "Ahead" "$ahead_count commit(s)"
+  pp_success "Pre-flight checks passed."
 }
 
 refuse_if_remote_advanced() {
@@ -232,9 +243,9 @@ refuse_if_remote_advanced() {
   current_upstream_head="$(git rev-parse "$upstream_ref")"
 
   if [[ "$current_upstream_head" != "$expected_upstream_head" ]]; then
-    echo "Upstream $upstream_ref advanced during the cycle; refusing to continue." >&2
-    echo "Expected upstream: $expected_upstream_head" >&2
-    echo "Current upstream:  $current_upstream_head" >&2
+    pp_error "Upstream $upstream_ref advanced during the cycle; refusing to continue."
+    pp_kv "Expected upstream" "$expected_upstream_head" >&2
+    pp_kv "Current upstream" "$current_upstream_head" >&2
     exit 1
   fi
 }
@@ -243,7 +254,7 @@ acquire_lock() {
   mkdir -p "$(dirname "$LOCK_DIR")" "$LOG_DIR"
 
   if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    echo "Another build loop appears to be running: $LOCK_DIR" >&2
+    pp_error "Another build loop appears to be running: $LOCK_DIR"
     exit 1
   fi
 
@@ -254,13 +265,13 @@ acquire_lock() {
 require_command git
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "Not inside a git work tree." >&2
+  pp_error "Not inside a git work tree."
   exit 1
 fi
 
 for file in "${REQUIRED_FILES[@]}"; do
   if [[ ! -f "$file" ]]; then
-    echo "Required file missing: $file" >&2
+    pp_error "Required file missing: $file"
     exit 1
   fi
 done
@@ -268,36 +279,46 @@ done
 require_customised_template
 acquire_lock
 
+pp_banner "Autonomous build loop"
+pp_kv "Max cycles" "$MAX_CYCLES"
+pp_kv "Sleep" "${SLEEP_SECONDS}s"
+pp_kv "Push after cycle" "$(pp_on_off "$PUSH_AFTER")"
+pp_kv "Allow ahead" "$(pp_on_off "$ALLOW_AHEAD")"
+pp_kv "Logs" "$LOG_DIR"
+
 cycle=0
 
 while (( cycle < MAX_CYCLES )); do
   automation_status="$(get_automation_status)"
   if [[ -z "$automation_status" ]]; then
-    echo "Missing top-level AUTOMATION_STATUS line in BUILD_TICKETS.md." >&2
+    pp_error "Missing top-level AUTOMATION_STATUS line in BUILD_TICKETS.md."
     exit 1
   fi
   if [[ "$automation_status" == "DONE" ]]; then
-    echo "Build tickets marked done."
+    pp_success "Build tickets marked done."
     exit 0
   fi
 
   cycle=$((cycle + 1))
-  echo "=== autonomous build cycle $cycle/$MAX_CYCLES ==="
+  pp_banner "Autonomous build cycle" "$cycle/$MAX_CYCLES"
 
+  pp_section "Pre-flight checks"
   sync_before_cycle
 
   before_head="$(git rev-parse HEAD)"
   log_file="$LOG_DIR/cycle-$(date +%Y%m%d-%H%M%S)-$cycle.log"
 
-  echo "Logging to $log_file"
+  pp_kv "Log file" "$log_file"
+  pp_section "Agent run"
 
   if ! scripts/run-agent.sh "$PROMPT" 2>&1 | tee "$log_file"; then
-    echo "Agent failed during cycle $cycle; stopping. See $log_file" >&2
+    pp_error "Agent failed during cycle $cycle; stopping."
+    pp_hint "See $log_file"
     exit 1
   fi
 
   if [[ -n "$(git status --porcelain)" ]]; then
-    echo "Agent left a dirty working tree; stopping for manual review." >&2
+    pp_error "Agent left a dirty working tree; stopping for manual review."
     git status --short >&2
     exit 1
   fi
@@ -307,21 +328,26 @@ while (( cycle < MAX_CYCLES )); do
   after_head="$(git rev-parse HEAD)"
 
   if [[ "$after_head" == "$before_head" ]]; then
-    echo "Cycle completed without a new commit; stopping." >&2
+    pp_error "Cycle completed without a new commit; stopping."
     exit 1
   fi
 
+  pp_success "Cycle committed $(git rev-parse --short HEAD)"
+
   if (( PUSH_AFTER == 1 )); then
+    pp_section "Push"
+    pp_cmd "git push"
     git push
   fi
 
   automation_status="$(get_automation_status)"
   if [[ "$automation_status" == "DONE" ]]; then
-    echo "Build tickets marked done."
+    pp_success "Build tickets marked done."
     exit 0
   fi
 
   if (( SLEEP_SECONDS > 0 )); then
+    pp_info "Sleeping ${SLEEP_SECONDS}s before next cycle."
     sleep "$SLEEP_SECONDS"
   fi
 done

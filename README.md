@@ -66,10 +66,11 @@ AGENTS.md              General rules for the coding agent
 PROJECT_BRIEF.md       Project-specific brief; customise before running
 BUILD_TICKETS.md       Ordered autonomous work queue
 BUILD_NOTES.md         Build state, latest notes, blockers
-scripts/build-loop.sh  Main autonomous loop
-scripts/run-agent.sh   Agent-specific wrapper
-scripts/quality-gate.sh Generic stack-aware validation script
-docs/USAGE.md          How to use this template
+scripts/build-loop.sh           Main autonomous loop
+scripts/run-agent.sh            Agent-specific wrapper
+scripts/quality-gate.sh         Generic stack-aware validation script
+scripts/lib/pretty-print.sh     Shared formatting helpers for script output
+docs/USAGE.md                   How to use this template
 ```
 
 ## Using this template

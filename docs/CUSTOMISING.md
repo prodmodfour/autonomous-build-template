@@ -16,6 +16,7 @@ AGENTS.md
 scripts/build-loop.sh
 scripts/run-agent.sh
 scripts/quality-gate.sh
+scripts/lib/pretty-print.sh
 ```
 
 ## Common customisations
