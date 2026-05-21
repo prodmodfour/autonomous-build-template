@@ -57,13 +57,75 @@ Run the mock output demo to see the coloured, delineated section style without i
 scripts/mock-output.sh
 ```
 
-## 5. Run one cycle
+## 5. Choose or create a work branch
+
+Run on the current branch, select an existing branch, or create a new branch before the loop starts.
+
+Select an existing local branch, or a unique remote branch:
+
+```bash
+scripts/build-loop.sh --branch feature/autonomous-build --max-cycles 20
+```
+
+Create a branch from `HEAD`:
+
+```bash
+scripts/build-loop.sh --create-branch feature/autonomous-build --max-cycles 20
+```
+
+Create a branch from a specific start point:
+
+```bash
+scripts/build-loop.sh --create-branch feature/autonomous-build --branch-start main --max-cycles 20
+```
+
+`--branch` and `--create-branch` require a clean working tree and cannot be used together.
+
+## 6. Optionally create a GitHub or GitLab repository
+
+Use `scripts/create-remote-repo.sh` after authenticating the relevant CLI.
+
+GitHub:
+
+```bash
+gh auth login
+scripts/create-remote-repo.sh --github --name OWNER/REPO --visibility private --branch feature/autonomous-build
+```
+
+GitLab:
+
+```bash
+glab auth login
+scripts/create-remote-repo.sh --gitlab --name GROUP/REPO --visibility private --branch feature/autonomous-build
+```
+
+The helper requires a clean working tree for real runs. It creates the remote repository, adds the selected local remote name (`origin` by default), and pushes the current branch by default. Use `--no-push` to create only the remote repository.
+
+If `origin` already points somewhere else, either choose another remote name:
+
+```bash
+scripts/create-remote-repo.sh --github --name OWNER/REPO --remote project-origin
+```
+
+or intentionally replace it:
+
+```bash
+scripts/create-remote-repo.sh --github --name OWNER/REPO --replace-remote
+```
+
+Preview without network or git changes:
+
+```bash
+scripts/create-remote-repo.sh --gitlab --name GROUP/REPO --dry-run --no-push
+```
+
+## 7. Run one cycle
 
 ```bash
 scripts/build-loop.sh
 ```
 
-## 6. Run multiple autonomous cycles
+## 8. Run multiple autonomous cycles
 
 ```bash
 scripts/build-loop.sh --max-cycles 20
@@ -72,7 +134,7 @@ scripts/build-loop.sh --max-cycles 20
 At the start of each cycle, the loop prints the current ticket it is working on.
 The loop pushes each successful cycle's commit by default.
 
-## 7. Run without pushing
+## 9. Run without pushing
 
 ```bash
 scripts/build-loop.sh --max-cycles 20 --no-push
@@ -80,7 +142,7 @@ scripts/build-loop.sh --max-cycles 20 --no-push
 
 The legacy `--push` flag is still accepted, but pushing is already enabled by default.
 
-## 8. If branch is already ahead
+## 10. If branch is already ahead
 
 By default, the loop refuses to start if the branch is ahead of upstream.
 
@@ -90,7 +152,7 @@ To allow this:
 scripts/build-loop.sh --max-cycles 20 --allow-ahead
 ```
 
-## 9. Changing the agent
+## 11. Changing the agent
 
 The main build loop is agent-agnostic.
 
@@ -108,7 +170,7 @@ pi --no-session -p @AGENTS.md @PROJECT_BRIEF.md @BUILD_TICKETS.md @BUILD_NOTES.m
 
 It intentionally does not pass model or thinking-level flags.
 
-## 10. Completion
+## 12. Completion
 
 The final ticket should set the top-level status in `BUILD_TICKETS.md` to:
 

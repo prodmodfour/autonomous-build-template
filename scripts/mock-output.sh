@@ -10,8 +10,14 @@ pp_banner "Mock autonomous build output" "Demonstrates formatting only; no agent
 pp_section "Summary"
 pp_info "Now working on: ticket 001 — Add core project functionality (TODO)"
 pp_kv "Cycle" "1/3"
-pp_kv "Branch" "main"
+pp_kv "Branch" "feature/autonomous-build"
 pp_success "Planned work has been identified."
+
+pp_section "Optional setup"
+pp_step "Create or select a work branch before the loop starts."
+pp_cmd "scripts/build-loop.sh --create-branch feature/autonomous-build --max-cycles 3"
+pp_step "Create a GitHub or GitLab repository from the current checkout."
+pp_cmd "scripts/create-remote-repo.sh --github --name OWNER/REPO --visibility private"
 
 pp_section "Validation"
 pp_step "Run shell syntax checks."

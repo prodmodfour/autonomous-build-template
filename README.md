@@ -25,6 +25,8 @@ The template provides:
 - an autonomous build loop
 - a generic quality gate
 - an agent wrapper script
+- branch selection/creation support for autonomous runs
+- GitHub/GitLab repository creation helper
 - safety checks around dirty working trees, remote changes, and completion status
 
 ## Core idea
@@ -71,10 +73,12 @@ CONTRIBUTING.md        Contribution guidelines
 LICENSE.md             MIT license
 SECURITY.md            Security reporting policy
 scripts/build-loop.sh           Main autonomous loop
+scripts/create-remote-repo.sh   GitHub/GitLab repository creation helper
 scripts/run-agent.sh            Agent-specific wrapper
 scripts/quality-gate.sh         Generic stack-aware validation script
 scripts/mock-output.sh          Mock output demo for terminal formatting
 scripts/lib/pretty-print.sh     Shared formatting helpers for script output
+scripts/lib/git-branch.sh       Shared branch selection/creation helpers
 docs/USAGE.md                   How to use this template
 ```
 
@@ -85,10 +89,14 @@ After creating a new repo from this template:
 1. Edit `PROJECT_BRIEF.md`.
 2. Set `TEMPLATE_CUSTOMISED: true`.
 3. Replace the example tickets in `BUILD_TICKETS.md`.
-4. Run the build loop.
+4. Optionally choose a work branch with `--branch` or `--create-branch`.
+5. Optionally create a GitHub/GitLab repository with `scripts/create-remote-repo.sh`.
+6. Run the build loop.
 
 ```bash
 scripts/build-loop.sh --max-cycles 40
+# or run on a new branch:
+scripts/build-loop.sh --create-branch feature/autonomous-build --max-cycles 40
 ```
 
 ## Safety defaults
@@ -100,6 +108,8 @@ The build loop refuses to start if:
 * `PROJECT_BRIEF.md` is still marked as uncustomised
 * the branch is behind upstream
 * the branch is ahead of upstream unless `--allow-ahead` is passed
+
+Use `--branch NAME` to select an existing local or unique remote branch before running, or `--create-branch NAME` to create one.
 
 By default, the loop pushes after each successful cycle that creates a commit. Pass `--no-push` to keep commits local.
 
@@ -130,6 +140,15 @@ Set:
 
 ```text
 TEMPLATE_CUSTOMISED: true
+```
+
+Optionally run the loop on a work branch and create a remote repository with one provider:
+
+```bash
+scripts/build-loop.sh --create-branch feature/autonomous-build --max-cycles 1
+scripts/create-remote-repo.sh --github --name OWNER/REPO --visibility private --branch feature/autonomous-build
+# or:
+scripts/create-remote-repo.sh --gitlab --name GROUP/REPO --visibility private --branch feature/autonomous-build
 ```
 
 Run one cycle:

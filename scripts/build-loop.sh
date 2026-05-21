@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/pretty-print.sh
 source "$SCRIPT_DIR/lib/pretty-print.sh"
+# shellcheck source=scripts/lib/git-branch.sh
+source "$SCRIPT_DIR/lib/git-branch.sh"
 
 usage() {
   cat <<'USAGE'
@@ -27,6 +29,10 @@ Options:
 --sleep SECONDS    Pause between successful cycles. Default: 0.
 --no-push          Do not push after successful cycles. By default, each new commit is pushed.
 --push             Push after successful cycles (default; kept for compatibility).
+--branch NAME      Select an existing local branch, or a unique remote branch, before running.
+--create-branch NAME
+                   Create and select a new branch before running.
+--branch-start REF Start point for --create-branch. Default: HEAD.
 --allow-ahead      Allow starting when branch is already ahead of upstream.
 --allow-template   Allow running even if PROJECT_BRIEF.md is still marked uncustomised.
 -h, --help         Show this help.
@@ -39,6 +45,10 @@ USAGE
 MAX_CYCLES=1
 SLEEP_SECONDS=0
 PUSH_AFTER=1
+SELECT_BRANCH=""
+CREATE_BRANCH=""
+BRANCH_START_POINT="HEAD"
+BRANCH_START_SET=0
 ALLOW_AHEAD=0
 ALLOW_TEMPLATE=0
 
@@ -74,6 +84,34 @@ while [[ $# -gt 0 ]]; do
       PUSH_AFTER=0
       shift
       ;;
+    --branch)
+      if [[ $# -lt 2 ]]; then
+        pp_error "--branch requires a value"
+        usage >&2
+        exit 2
+      fi
+      SELECT_BRANCH="$2"
+      shift 2
+      ;;
+    --create-branch)
+      if [[ $# -lt 2 ]]; then
+        pp_error "--create-branch requires a value"
+        usage >&2
+        exit 2
+      fi
+      CREATE_BRANCH="$2"
+      shift 2
+      ;;
+    --branch-start)
+      if [[ $# -lt 2 ]]; then
+        pp_error "--branch-start requires a value"
+        usage >&2
+        exit 2
+      fi
+      BRANCH_START_POINT="$2"
+      BRANCH_START_SET=1
+      shift 2
+      ;;
     --allow-ahead)
       ALLOW_AHEAD=1
       shift
@@ -100,6 +138,16 @@ if ! [[ "$SLEEP_SECONDS" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+if [[ -n "$SELECT_BRANCH" && -n "$CREATE_BRANCH" ]]; then
+  pp_error "--branch and --create-branch cannot be used together"
+  exit 2
+fi
+
+if (( BRANCH_START_SET == 1 )) && [[ -z "$CREATE_BRANCH" ]]; then
+  pp_error "--branch-start requires --create-branch"
+  exit 2
+fi
+
 REQUIRED_FILES=(
   AGENTS.md
   PROJECT_BRIEF.md
@@ -108,6 +156,7 @@ REQUIRED_FILES=(
   scripts/quality-gate.sh
   scripts/run-agent.sh
   scripts/lib/pretty-print.sh
+  scripts/lib/git-branch.sh
 )
 
 LOG_DIR=".agent/logs/build-loop"
@@ -161,11 +210,7 @@ require_command() {
 }
 
 require_clean_tree() {
-  if [[ -n "$(git status --porcelain)" ]]; then
-    pp_error "Working tree is dirty; refusing to start."
-    git status --short >&2
-    exit 1
-  fi
+  git_branch_require_clean_tree || exit 1
 }
 
 require_customised_template() {
@@ -328,6 +373,28 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+acquire_lock
+
+pp_banner "Autonomous build loop"
+pp_kv "Max cycles" "$MAX_CYCLES"
+pp_kv "Sleep" "${SLEEP_SECONDS}s"
+pp_kv "Push after commit" "$(pp_on_off "$PUSH_AFTER")"
+if [[ -n "$SELECT_BRANCH" ]]; then
+  pp_kv "Select branch" "$SELECT_BRANCH"
+elif [[ -n "$CREATE_BRANCH" ]]; then
+  pp_kv "Create branch" "$CREATE_BRANCH"
+  pp_kv "Branch start" "$BRANCH_START_POINT"
+fi
+pp_kv "Allow ahead" "$(pp_on_off "$ALLOW_AHEAD")"
+pp_kv "Logs" "$LOG_DIR"
+
+if [[ -n "$SELECT_BRANCH" || -n "$CREATE_BRANCH" ]]; then
+  pp_section "Branch setup"
+  git_branch_prepare "$SELECT_BRANCH" "$CREATE_BRANCH" "$BRANCH_START_POINT" || exit $?
+fi
+
+pp_kv "Current branch" "$(git_branch_current)"
+
 for file in "${REQUIRED_FILES[@]}"; do
   if [[ ! -f "$file" ]]; then
     pp_error "Required file missing: $file"
@@ -336,14 +403,6 @@ for file in "${REQUIRED_FILES[@]}"; do
 done
 
 require_customised_template
-acquire_lock
-
-pp_banner "Autonomous build loop"
-pp_kv "Max cycles" "$MAX_CYCLES"
-pp_kv "Sleep" "${SLEEP_SECONDS}s"
-pp_kv "Push after commit" "$(pp_on_off "$PUSH_AFTER")"
-pp_kv "Allow ahead" "$(pp_on_off "$ALLOW_AHEAD")"
-pp_kv "Logs" "$LOG_DIR"
 
 cycle=0
 
@@ -403,8 +462,7 @@ while (( cycle < MAX_CYCLES )); do
 
   if (( PUSH_AFTER == 1 )); then
     pp_section "Push"
-    pp_cmd "git push"
-    git push
+    git_branch_push_current origin
   fi
 
   automation_status="$(get_automation_status)"

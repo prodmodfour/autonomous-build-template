@@ -10,7 +10,9 @@ The build loop:
 * refuses uncustomised templates by default
 * locks to avoid concurrent runs
 * checks upstream before and after each cycle
+* can select an existing branch with `--branch` or create one with `--create-branch`
 * pushes each successful cycle's commit by default unless `--no-push` is passed
+* sets upstream on first push when the current branch has no upstream but `origin` exists
 * stops if the agent leaves uncommitted changes
 * stops if no commit is produced
 * checks only the top-level automation status
@@ -42,6 +44,12 @@ Before making a repo public, manually review:
 * logs
 * generated files
 * CI workflows
+
+## Remote repository creation safety
+
+`scripts/create-remote-repo.sh` can create GitHub or GitLab repositories using the authenticated `gh` or `glab` CLI. It requires a clean working tree for non-dry runs, refuses to overwrite an existing local remote unless `--replace-remote` is passed, and supports `--dry-run` for previewing commands.
+
+Review visibility (`private`, `public`, or `internal`) before creating a repository, especially before pushing template-derived or newly generated code.
 
 ## Cloud safety
 

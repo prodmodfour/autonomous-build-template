@@ -14,9 +14,11 @@ README.md
 ```text
 AGENTS.md
 scripts/build-loop.sh
+scripts/create-remote-repo.sh
 scripts/run-agent.sh
 scripts/quality-gate.sh
 scripts/lib/pretty-print.sh
+scripts/lib/git-branch.sh
 ```
 
 ## Common customisations
