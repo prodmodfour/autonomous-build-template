@@ -27,6 +27,11 @@ while IFS= read -r -d '' script; do
 done < <(find scripts -type f -name '*.sh' -print0 | sort -z)
 pp_success "Shell syntax checks passed."
 
+if [[ -f scripts/test-build-loop-state.sh ]]; then
+  pp_section "Script regression tests"
+  run_cmd bash scripts/test-build-loop-state.sh
+fi
+
 if [[ -f scripts/check-no-secrets.sh ]]; then
   pp_section "Secret guardrail"
   run_cmd bash scripts/check-no-secrets.sh

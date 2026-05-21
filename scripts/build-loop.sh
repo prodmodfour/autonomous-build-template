@@ -37,6 +37,12 @@ Options:
 --allow-template   Allow running even if PROJECT_BRIEF.md is still marked uncustomised.
 -h, --help         Show this help.
 
+Environment:
+AUTONOMOUS_BUILD_LOOP_STATE_DIR
+                   Override the per-repository state directory used for build-loop
+                   logs and lock files. Defaults outside the repository under
+                   ${XDG_STATE_HOME:-$HOME/.local/state}/autonomous-build-template/build-loop/<repo-key>.
+
 This script intentionally does not pass a model or thinking level.
 Agent invocation is delegated to scripts/run-agent.sh.
 USAGE
@@ -159,8 +165,9 @@ REQUIRED_FILES=(
   scripts/lib/git-branch.sh
 )
 
-LOG_DIR=".agent/logs/build-loop"
-LOCK_DIR=".agent/build-loop.lock"
+BUILD_LOOP_STATE_DIR=""
+LOG_DIR=""
+LOCK_DIR=""
 CYCLE_UPSTREAM_REF=""
 CYCLE_UPSTREAM_HEAD=""
 
@@ -348,8 +355,54 @@ refuse_if_remote_advanced() {
   fi
 }
 
+sanitize_state_component() {
+  local value="$1"
+  local sanitized
+
+  sanitized="$(printf '%s' "$value" | tr -c 'A-Za-z0-9._-' '-')"
+  sanitized="${sanitized:0:80}"
+
+  if [[ -z "$sanitized" ]]; then
+    sanitized="repo"
+  fi
+
+  printf '%s\n' "$sanitized"
+}
+
+configure_build_loop_state_paths() {
+  local repo_root
+  local repo_name
+  local repo_slug
+  local repo_hash
+  local state_home
+  local state_dir
+
+  if [[ -n "${AUTONOMOUS_BUILD_LOOP_STATE_DIR:-}" ]]; then
+    state_dir="$AUTONOMOUS_BUILD_LOOP_STATE_DIR"
+  else
+    if [[ -n "${XDG_STATE_HOME:-}" ]]; then
+      state_home="$XDG_STATE_HOME"
+    elif [[ -n "${HOME:-}" ]]; then
+      state_home="$HOME/.local/state"
+    else
+      pp_error "HOME must be set when XDG_STATE_HOME and AUTONOMOUS_BUILD_LOOP_STATE_DIR are not set."
+      exit 1
+    fi
+
+    repo_root="$(git rev-parse --show-toplevel)"
+    repo_name="$(basename "$repo_root")"
+    repo_slug="$(sanitize_state_component "$repo_name")"
+    repo_hash="$(printf '%s' "$repo_root" | git hash-object --stdin | cut -c 1-12)"
+    state_dir="$state_home/autonomous-build-template/build-loop/${repo_slug}-${repo_hash}"
+  fi
+
+  BUILD_LOOP_STATE_DIR="$state_dir"
+  LOG_DIR="$BUILD_LOOP_STATE_DIR/logs"
+  LOCK_DIR="$BUILD_LOOP_STATE_DIR/lock"
+}
+
 acquire_lock() {
-  mkdir -p "$(dirname "$LOCK_DIR")" "$LOG_DIR"
+  mkdir -p "$BUILD_LOOP_STATE_DIR" "$LOG_DIR"
 
   if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     pp_error "Another build loop appears to be running: $LOCK_DIR"
@@ -367,6 +420,7 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+configure_build_loop_state_paths
 acquire_lock
 
 pp_banner "Autonomous build loop"
@@ -380,6 +434,7 @@ elif [[ -n "$CREATE_BRANCH" ]]; then
   pp_kv "Branch start" "$BRANCH_START_POINT"
 fi
 pp_kv "Allow ahead" "$(pp_on_off "$ALLOW_AHEAD")"
+pp_kv "State dir" "$BUILD_LOOP_STATE_DIR"
 pp_kv "Logs" "$LOG_DIR"
 
 if [[ -n "$SELECT_BRANCH" || -n "$CREATE_BRANCH" ]]; then
@@ -426,6 +481,7 @@ while (( cycle < MAX_CYCLES )); do
   sync_before_cycle
 
   before_head="$(git rev-parse HEAD)"
+  mkdir -p "$LOG_DIR"
   log_file="$LOG_DIR/cycle-$(date +%Y%m%d-%H%M%S)-$cycle.log"
 
   pp_kv "Log file" "$log_file"

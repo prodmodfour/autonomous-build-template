@@ -142,13 +142,29 @@ scripts/build-loop.sh --max-cycles 20 --no-push
 
 The legacy `--push` flag is still accepted, but pushing is already enabled by default.
 
-## 10. If branch is already ahead
+## 10. Build-loop logs and lock files
+
+Active build-loop state is kept outside the repository by default:
+
+```text
+${XDG_STATE_HOME:-$HOME/.local/state}/autonomous-build-template/build-loop/<repo-key>/
+```
+
+This directory contains cycle logs and the active lock directory. Keeping it outside `.agent/` prevents private/runtime cleanup from deleting the parent directory needed by `tee` between cycles.
+
+Override the per-repository state directory when needed:
+
+```bash
+AUTONOMOUS_BUILD_LOOP_STATE_DIR=/path/to/build-loop-state scripts/build-loop.sh --max-cycles 20
+```
+
+## 11. If branch is already ahead
 
 Branches that are already ahead of upstream are allowed by default. The loop still refuses to start when the branch is behind upstream, and still stops if upstream advances during a cycle.
 
 The legacy `--allow-ahead` flag is still accepted for older scripts, but it is no longer required.
 
-## 11. Changing the agent
+## 12. Changing the agent
 
 The main build loop is agent-agnostic.
 
@@ -166,7 +182,7 @@ pi --no-session -p @AGENTS.md @PROJECT_BRIEF.md @BUILD_TICKETS.md @BUILD_NOTES.m
 
 It intentionally does not pass model or thinking-level flags.
 
-## 12. Completion
+## 13. Completion
 
 The final ticket should set the top-level status in `BUILD_TICKETS.md` to:
 

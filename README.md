@@ -76,6 +76,7 @@ scripts/build-loop.sh           Main autonomous loop
 scripts/create-remote-repo.sh   GitHub/GitLab repository creation helper
 scripts/run-agent.sh            Agent-specific wrapper
 scripts/quality-gate.sh         Generic stack-aware validation script
+scripts/test-build-loop-state.sh Regression test for external build-loop state
 scripts/mock-output.sh          Mock output demo for terminal formatting
 scripts/lib/pretty-print.sh     Shared formatting helpers for script output
 scripts/lib/git-branch.sh       Shared branch selection/creation helpers
@@ -113,6 +114,14 @@ Branches that are already ahead of upstream are allowed by default.
 Use `--branch NAME` to select an existing local or unique remote branch before running, or `--create-branch NAME` to create one.
 
 By default, the loop pushes after each successful cycle that creates a commit. Pass `--no-push` to keep commits local.
+
+Build-loop logs and lock files are kept outside the repository by default:
+
+```text
+${XDG_STATE_HOME:-$HOME/.local/state}/autonomous-build-template/build-loop/<repo-key>/
+```
+
+Set `AUTONOMOUS_BUILD_LOOP_STATE_DIR=/path/to/state` to override this per-repository state directory. Keeping active logs and locks out of `.agent/` prevents private/runtime cleanup from breaking later cycles.
 
 The loop stops if:
 
