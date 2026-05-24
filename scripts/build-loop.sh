@@ -42,6 +42,9 @@ AUTONOMOUS_BUILD_LOOP_STATE_DIR
                    Override the per-repository state directory used for build-loop
                    logs and lock files. Defaults outside the repository under
                    ${XDG_STATE_HOME:-$HOME/.local/state}/autonomous-build-template/build-loop/<repo-key>.
+AUTONOMOUS_BUILD_RETRY_SECONDS
+                   Seconds to wait before retrying after transient agent failures.
+                   Defaults to 600 (10 minutes).
 
 This script intentionally does not pass a model or thinking level.
 Agent invocation is delegated to scripts/run-agent.sh.
@@ -57,6 +60,7 @@ BRANCH_START_POINT="HEAD"
 BRANCH_START_SET=0
 ALLOW_AHEAD=1
 ALLOW_TEMPLATE=0
+AGENT_RETRY_SECONDS="${AUTONOMOUS_BUILD_RETRY_SECONDS:-600}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -144,6 +148,11 @@ if ! [[ "$SLEEP_SECONDS" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+if ! [[ "$AGENT_RETRY_SECONDS" =~ ^[0-9]+$ ]]; then
+  pp_error "AUTONOMOUS_BUILD_RETRY_SECONDS must be a non-negative integer"
+  exit 2
+fi
+
 if [[ -n "$SELECT_BRANCH" && -n "$CREATE_BRANCH" ]]; then
   pp_error "--branch and --create-branch cannot be used together"
   exit 2
@@ -209,10 +218,129 @@ If you cannot safely complete the ticket:
 PROMPT_EOF
 )
 
+SPLIT_TICKET_PROMPT=$(cat <<'PROMPT_EOF'
+You are running a recovery task for an autonomous build loop after the implementation agent failed with a token or context-length error.
+
+This recovery task overrides the normal implementation workflow in AGENTS.md.
+
+Read AGENTS.md, PROJECT_BRIEF.md, BUILD_TICKETS.md, and BUILD_NOTES.md.
+
+Your only task in this run:
+
+* Identify the lowest-numbered TODO or IN_PROGRESS ticket in BUILD_TICKETS.md.
+* Split that one ticket into two smaller, sequential, independently actionable tickets.
+* Preserve the original intent and acceptance criteria across the two new tickets.
+* Make the first ticket a narrow foundation or vertical slice.
+* Make the second ticket the remaining behaviour, integration, documentation, or validation work.
+* Keep both tickets small enough for separate future autonomous runs.
+* Preserve the original status on the first split ticket if it was IN_PROGRESS; otherwise use TODO.
+* Set the second split ticket to TODO.
+* Renumber later tickets if needed to keep ordering clear.
+* Do not implement product code.
+* Do not start or complete any ticket.
+* Do not run the normal quality gate unless you need it to validate this ticket-file-only edit.
+* Update BUILD_NOTES.md with a short recovery note explaining that the original ticket was split because the previous run hit a token/context-length limit.
+* Commit only BUILD_TICKETS.md and BUILD_NOTES.md with a conventional commit message such as "chore: split oversized build ticket".
+* Leave the working tree clean.
+PROMPT_EOF
+)
+
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     pp_error "Required command not found: $1"
     exit 127
+  fi
+}
+
+run_agent_with_log() {
+  local prompt="$1"
+  local log_file="$2"
+  local -a pipeline_status
+  local agent_status
+  local tee_status
+
+  set +e
+  scripts/run-agent.sh "$prompt" 2>&1 | tee "$log_file"
+  pipeline_status=("${PIPESTATUS[@]}")
+  set -e
+
+  agent_status="${pipeline_status[0]}"
+  tee_status="${pipeline_status[1]}"
+
+  if (( tee_status != 0 )); then
+    pp_error "Failed to write agent log: $log_file"
+    return 125
+  fi
+
+  return "$agent_status"
+}
+
+is_token_context_failure() {
+  local log_file="$1"
+
+  [[ -f "$log_file" ]] || return 1
+
+  grep -Eiq '(context[_ -]?length|context window|context_length_exceeded|maximum context|max context|context limit)' "$log_file" && return 0
+  grep -Eiq '(too many tokens|too much input|token limit|token budget|maximum tokens|max tokens|exceed(ed|s|ing)?[^[:cntrl:]]{0,120}tokens|tokens[^[:cntrl:]]{0,120}exceed(ed|s|ing)?)' "$log_file" && return 0
+  grep -Eiq '((input|prompt)[^[:cntrl:]]{0,80}(too long|too large|exceed(ed|s|ing)?)|maximum (input|prompt) length|request too large)' "$log_file" && return 0
+
+  return 1
+}
+
+sleep_before_agent_retry() {
+  local reason="$1"
+
+  if (( AGENT_RETRY_SECONDS > 0 )); then
+    pp_warn "$reason; retrying in ${AGENT_RETRY_SECONDS}s."
+    sleep "$AGENT_RETRY_SECONDS"
+  else
+    pp_warn "$reason; retrying immediately."
+  fi
+}
+
+git_clean_preserving_build_loop_state() {
+  local repo_root
+  local repo_abs
+  local state_abs
+  local state_rel
+
+  repo_root="$(git rev-parse --show-toplevel)"
+  repo_abs="$(cd "$repo_root" && pwd -P)"
+  state_abs="$(cd "$BUILD_LOOP_STATE_DIR" 2>/dev/null && pwd -P || true)"
+
+  if [[ -n "$state_abs" && "$state_abs" == "$repo_abs"/* ]]; then
+    state_rel="${state_abs#"$repo_abs"/}"
+    pp_cmd "git clean -fd -e $state_rel/"
+    git clean -fd -e "$state_rel/" >/dev/null
+  else
+    pp_cmd "git clean -fd"
+    git clean -fd >/dev/null
+  fi
+}
+
+restore_clean_tree_after_failed_agent() {
+  local before_head="$1"
+  local current_head
+
+  current_head="$(git rev-parse HEAD)"
+  if [[ "$current_head" != "$before_head" ]]; then
+    pp_error "Agent changed HEAD before failing; stopping for manual review."
+    pp_hint "Before failure: $before_head"
+    pp_hint "Current HEAD:    $current_head"
+    return 1
+  fi
+
+  if [[ -n "$(git status --porcelain)" ]]; then
+    pp_warn "Agent left uncommitted changes after failure; restoring the pre-run clean tree."
+    pp_cmd "git reset --hard $before_head"
+    git reset --hard "$before_head" >/dev/null
+    git_clean_preserving_build_loop_state
+  fi
+
+  if [[ -n "$(git status --porcelain)" ]]; then
+    pp_error "Unable to restore a clean working tree after failed agent run."
+    git status --short >&2
+    return 1
   fi
 }
 
@@ -355,6 +483,62 @@ refuse_if_remote_advanced() {
   fi
 }
 
+split_current_ticket_after_context_failure() {
+  local split_before_head
+  local split_log
+  local split_status
+  local split_after_head
+
+  pp_section "Token/context recovery"
+  pp_warn "Detected a token/context-length failure in the agent log."
+  pp_info "Asking the configured Pi agent wrapper to split the current ticket into two smaller tickets."
+
+  split_before_head="$(git rev-parse HEAD)"
+  mkdir -p "$LOG_DIR"
+  log_sequence=$((log_sequence + 1))
+  split_log="$LOG_DIR/split-ticket-$(date +%Y%m%d-%H%M%S)-$cycle-$log_sequence.log"
+
+  pp_kv "Split log file" "$split_log"
+
+  if run_agent_with_log "$SPLIT_TICKET_PROMPT" "$split_log"; then
+    split_status=0
+  else
+    split_status=$?
+  fi
+
+  if (( split_status != 0 )); then
+    pp_error "Ticket split agent failed with exit status $split_status."
+    pp_hint "See $split_log"
+    if (( split_status == 130 || split_status == 143 )); then
+      pp_error "Ticket split agent was interrupted; stopping."
+      return 2
+    fi
+    restore_clean_tree_after_failed_agent "$split_before_head" || return 2
+    return 1
+  fi
+
+  if [[ -n "$(git status --porcelain)" ]]; then
+    pp_error "Ticket split agent left a dirty working tree; stopping for manual review."
+    git status --short >&2
+    return 2
+  fi
+
+  split_after_head="$(git rev-parse HEAD)"
+  if [[ "$split_after_head" == "$split_before_head" ]]; then
+    pp_error "Ticket split recovery completed without a new commit; stopping."
+    return 2
+  fi
+
+  refuse_if_remote_advanced "$CYCLE_UPSTREAM_REF" "$CYCLE_UPSTREAM_HEAD"
+
+  pp_success "Ticket split committed $(git rev-parse --short HEAD)"
+
+  if (( PUSH_AFTER == 1 )); then
+    pp_section "Push ticket split"
+    git_branch_push_current origin
+  fi
+}
+
 sanitize_state_component() {
   local value="$1"
   local sanitized
@@ -426,6 +610,7 @@ acquire_lock
 pp_banner "Autonomous build loop"
 pp_kv "Max cycles" "$MAX_CYCLES"
 pp_kv "Sleep" "${SLEEP_SECONDS}s"
+pp_kv "Agent retry sleep" "${AGENT_RETRY_SECONDS}s"
 pp_kv "Push after commit" "$(pp_on_off "$PUSH_AFTER")"
 if [[ -n "$SELECT_BRANCH" ]]; then
   pp_kv "Select branch" "$SELECT_BRANCH"
@@ -454,6 +639,7 @@ done
 require_customised_template
 
 cycle=0
+log_sequence=0
 
 while (( cycle < MAX_CYCLES )); do
   automation_status="$(get_automation_status)"
@@ -482,15 +668,57 @@ while (( cycle < MAX_CYCLES )); do
 
   before_head="$(git rev-parse HEAD)"
   mkdir -p "$LOG_DIR"
-  log_file="$LOG_DIR/cycle-$(date +%Y%m%d-%H%M%S)-$cycle.log"
+  log_sequence=$((log_sequence + 1))
+  log_file="$LOG_DIR/cycle-$(date +%Y%m%d-%H%M%S)-$cycle-$log_sequence.log"
 
   pp_kv "Log file" "$log_file"
   pp_section "Agent run"
 
-  if ! scripts/run-agent.sh "$PROMPT" 2>&1 | tee "$log_file"; then
-    pp_error "Agent failed during cycle $cycle; stopping."
+  if run_agent_with_log "$PROMPT" "$log_file"; then
+    agent_status=0
+  else
+    agent_status=$?
+  fi
+
+  if (( agent_status != 0 )); then
+    if (( agent_status == 125 )); then
+      pp_error "Agent log capture failed during cycle $cycle; stopping."
+      pp_hint "See $log_file"
+      exit 1
+    fi
+
+    if (( agent_status == 130 || agent_status == 143 )); then
+      pp_error "Agent was interrupted during cycle $cycle; stopping."
+      pp_hint "See $log_file"
+      exit "$agent_status"
+    fi
+
+    pp_error "Agent failed during cycle $cycle with exit status $agent_status."
     pp_hint "See $log_file"
-    exit 1
+
+    if ! restore_clean_tree_after_failed_agent "$before_head"; then
+      exit 1
+    fi
+
+    if is_token_context_failure "$log_file"; then
+      if split_current_ticket_after_context_failure; then
+        pp_info "Continuing with the split ticket queue."
+        cycle=$((cycle - 1))
+        continue
+      else
+        split_recovery_status=$?
+        if (( split_recovery_status == 2 )); then
+          exit 1
+        fi
+        sleep_before_agent_retry "Ticket split recovery failed"
+        cycle=$((cycle - 1))
+        continue
+      fi
+    fi
+
+    sleep_before_agent_retry "Agent failed; assuming a transient provider/server issue"
+    cycle=$((cycle - 1))
+    continue
   fi
 
   if [[ -n "$(git status --porcelain)" ]]; then

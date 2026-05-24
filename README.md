@@ -65,22 +65,23 @@ scripts/run-agent.sh
 ## Repository files
 
 ```text
-AGENTS.md              General rules for the coding agent
-PROJECT_BRIEF.md       Project-specific brief; customise before running
-BUILD_TICKETS.md       Ordered autonomous work queue
-BUILD_NOTES.md         Build state, latest notes, blockers
-CONTRIBUTING.md        Contribution guidelines
-LICENSE.md             MIT license
-SECURITY.md            Security reporting policy
-scripts/build-loop.sh           Main autonomous loop
-scripts/create-remote-repo.sh   GitHub/GitLab repository creation helper
-scripts/run-agent.sh            Agent-specific wrapper
-scripts/quality-gate.sh         Generic stack-aware validation script
-scripts/test-build-loop-state.sh Regression test for external build-loop state
-scripts/mock-output.sh          Mock output demo for terminal formatting
-scripts/lib/pretty-print.sh     Shared formatting helpers for script output
-scripts/lib/git-branch.sh       Shared branch selection/creation helpers
-docs/USAGE.md                   How to use this template
+AGENTS.md                           General rules for the coding agent
+PROJECT_BRIEF.md                    Project-specific brief; customise before running
+BUILD_TICKETS.md                    Ordered autonomous work queue
+BUILD_NOTES.md                      Build state, latest notes, blockers
+CONTRIBUTING.md                     Contribution guidelines
+LICENSE.md                          MIT license
+SECURITY.md                         Security reporting policy
+scripts/build-loop.sh               Main autonomous loop
+scripts/create-remote-repo.sh       GitHub/GitLab repository creation helper
+scripts/run-agent.sh                Agent-specific wrapper
+scripts/quality-gate.sh             Generic stack-aware validation script
+scripts/test-build-loop-state.sh    Regression test for external build-loop state
+scripts/test-build-loop-recovery.sh Regression test for failure recovery and retries
+scripts/mock-output.sh              Mock output demo for terminal formatting
+scripts/lib/pretty-print.sh         Shared formatting helpers for script output
+scripts/lib/git-branch.sh           Shared branch selection/creation helpers
+docs/USAGE.md                       How to use this template
 ```
 
 ## Using this template
@@ -123,11 +124,18 @@ ${XDG_STATE_HOME:-$HOME/.local/state}/autonomous-build-template/build-loop/<repo
 
 Set `AUTONOMOUS_BUILD_LOOP_STATE_DIR=/path/to/state` to override this per-repository state directory. Keeping active logs and locks out of `.agent/` prevents private/runtime cleanup from breaking later cycles.
 
-The loop stops if:
+Agent failures are handled automatically:
 
-* the agent fails
-* the agent leaves a dirty working tree
-* no new commit was created
+* token/context-length failures trigger a recovery run through the configured Pi agent wrapper, splitting the current ticket into two smaller tickets, committing the ticket update, and retrying the same cycle
+* other agent failures are treated as likely transient provider/server issues and retried after 10 minutes
+
+Set `AUTONOMOUS_BUILD_RETRY_SECONDS=0` (or another non-negative value) to change the retry delay.
+
+The loop still stops if:
+
+* an agent failure cannot be safely restored to a clean pre-run tree
+* the agent or recovery run leaves a dirty working tree
+* no new commit was created by a successful implementation cycle
 * upstream changes during the cycle
 * `AUTOMATION_STATUS: DONE` is set at the top level of `BUILD_TICKETS.md`
 

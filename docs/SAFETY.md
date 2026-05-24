@@ -13,8 +13,10 @@ The build loop:
 * can select an existing branch with `--branch` or create one with `--create-branch`
 * pushes each successful cycle's commit by default unless `--no-push` is passed
 * sets upstream on first push when the current branch has no upstream but `origin` exists
-* stops if the agent leaves uncommitted changes
-* stops if no commit is produced
+* restores failed agent runs back to the pre-run clean tree before automatic retry or ticket-splitting recovery
+* stops if a failed run cannot be safely restored, or if a successful agent/recovery run leaves uncommitted changes
+* splits the current ticket after token/context-length failures and retries other agent failures after the configured delay
+* stops if no commit is produced by a successful implementation cycle
 * checks only the top-level automation status
 * delegates agent invocation to a wrapper script
 

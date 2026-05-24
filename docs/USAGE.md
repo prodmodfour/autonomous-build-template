@@ -158,13 +158,27 @@ Override the per-repository state directory when needed:
 AUTONOMOUS_BUILD_LOOP_STATE_DIR=/path/to/build-loop-state scripts/build-loop.sh --max-cycles 20
 ```
 
-## 11. If branch is already ahead
+## 11. Automatic agent failure recovery
+
+If an implementation run fails with a token or context-length error, the loop asks the configured Pi agent wrapper to split the current lowest-numbered `TODO` or `IN_PROGRESS` ticket into two smaller tickets. The split is committed, and the same cycle is retried so `--max-cycles 1` can still complete one implementation cycle after recovery.
+
+If an implementation run fails for another reason, the loop assumes a transient provider/server issue and retries the same cycle after 10 minutes.
+
+Override the retry delay when needed:
+
+```bash
+AUTONOMOUS_BUILD_RETRY_SECONDS=60 scripts/build-loop.sh --max-cycles 20
+```
+
+Use `AUTONOMOUS_BUILD_RETRY_SECONDS=0` for immediate retries in tests.
+
+## 12. If branch is already ahead
 
 Branches that are already ahead of upstream are allowed by default. The loop still refuses to start when the branch is behind upstream, and still stops if upstream advances during a cycle.
 
 The legacy `--allow-ahead` flag is still accepted for older scripts, but it is no longer required.
 
-## 12. Changing the agent
+## 13. Changing the agent
 
 The main build loop is agent-agnostic.
 
@@ -182,7 +196,7 @@ pi --no-session -p @AGENTS.md @PROJECT_BRIEF.md @BUILD_TICKETS.md @BUILD_NOTES.m
 
 It intentionally does not pass model or thinking-level flags.
 
-## 13. Completion
+## 14. Completion
 
 The final ticket should set the top-level status in `BUILD_TICKETS.md` to:
 
