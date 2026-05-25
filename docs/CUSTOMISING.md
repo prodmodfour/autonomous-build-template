@@ -19,6 +19,7 @@ scripts/run-agent.sh
 scripts/quality-gate.sh
 scripts/lib/pretty-print.sh
 scripts/lib/git-branch.sh
+scripts/lib/pull-request.sh
 ```
 
 ## Common customisations

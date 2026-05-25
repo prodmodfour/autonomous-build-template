@@ -24,13 +24,13 @@ Result: passed.
 
 ## Latest cycle notes
 
-Fixed build-loop runtime state handling in the template:
+Added optional PR/MR automation to the build loop:
 
-* moved active log and lock paths out of `.agent/` by default
-* added the `AUTONOMOUS_BUILD_LOOP_STATE_DIR` override
-* recreated the log directory before each `tee`
-* added a regression test that simulates `.agent/` cleanup between cycles
-* documented the external state directory in README and usage docs
+* added `--pr-each-cycle` / `--create-pr` to create or reuse a PR/MR after each successful cycle
+* added `--merge-pr-each-cycle` / `--merge-pr` to create and merge as the loop progresses
+* supports GitHub via `gh` and GitLab via `glab`
+* added shared PR/MR helper functions and a regression test with a fake `gh` CLI
+* documented setup requirements and usage in README and usage docs
 
 ## Known blockers
 

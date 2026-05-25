@@ -12,6 +12,7 @@ The build loop:
 * checks upstream before and after each cycle, while allowing branches that are already ahead of upstream
 * can select an existing branch with `--branch` or create one with `--create-branch`
 * pushes each successful cycle's commit by default unless `--no-push` is passed
+* can create or create-and-merge a PR/MR after each successful cycle when explicitly enabled
 * sets upstream on first push when the current branch has no upstream but `origin` exists
 * restores failed agent runs back to the pre-run clean tree before automatic retry or ticket-splitting recovery
 * stops if a failed run cannot be safely restored, or if a successful agent/recovery run leaves uncommitted changes
@@ -47,11 +48,13 @@ Before making a repo public, manually review:
 * generated files
 * CI workflows
 
-## Remote repository creation safety
+## Remote repository and PR/MR safety
 
 `scripts/create-remote-repo.sh` can create GitHub or GitLab repositories using the authenticated `gh` or `glab` CLI. It requires a clean working tree for non-dry runs, refuses to overwrite an existing local remote unless `--replace-remote` is passed, and supports `--dry-run` for previewing commands.
 
 Review visibility (`private`, `public`, or `internal`) before creating a repository, especially before pushing template-derived or newly generated code.
+
+Build-loop PR/MR automation is opt-in. `--pr-each-cycle` creates or reuses a PR/MR after each successful cycle, and `--merge-pr-each-cycle` creates and immediately merges it. Use a work branch that differs from the base branch, and make sure branch protection, required checks, and merge permissions match the level of autonomy you want.
 
 ## Cloud safety
 

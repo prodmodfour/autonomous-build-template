@@ -27,6 +27,7 @@ The template provides:
 - an agent wrapper script
 - branch selection/creation support for autonomous runs
 - GitHub/GitLab repository creation helper
+- optional GitHub PR / GitLab MR creation and merge after each successful cycle
 - safety checks around dirty working trees, remote changes, and completion status
 
 ## Core idea
@@ -42,7 +43,9 @@ Each autonomous cycle should:
 5. Run `scripts/quality-gate.sh`.
 6. Update tickets and notes.
 7. Commit the completed work.
-8. Leave the working tree clean.
+8. Push the commit.
+9. Optionally create or create-and-merge a PR/MR for the commit.
+10. Leave the working tree clean.
 
 ## Important
 
@@ -78,9 +81,11 @@ scripts/run-agent.sh                Agent-specific wrapper
 scripts/quality-gate.sh             Generic stack-aware validation script
 scripts/test-build-loop-state.sh    Regression test for external build-loop state
 scripts/test-build-loop-recovery.sh Regression test for failure recovery and retries
+scripts/test-build-loop-pr.sh       Regression test for PR/MR automation
 scripts/mock-output.sh              Mock output demo for terminal formatting
 scripts/lib/pretty-print.sh         Shared formatting helpers for script output
 scripts/lib/git-branch.sh           Shared branch selection/creation helpers
+scripts/lib/pull-request.sh         Shared GitHub PR / GitLab MR helpers
 docs/USAGE.md                       How to use this template
 ```
 
@@ -93,7 +98,8 @@ After creating a new repo from this template:
 3. Replace the example tickets in `BUILD_TICKETS.md`.
 4. Optionally choose a work branch with `--branch` or `--create-branch`.
 5. Optionally create a GitHub/GitLab repository with `scripts/create-remote-repo.sh`.
-6. Run the build loop.
+6. Optionally enable PR/MR creation or create-and-merge automation for each cycle.
+7. Run the build loop.
 
 ```bash
 scripts/build-loop.sh --max-cycles 40
@@ -116,6 +122,8 @@ Use `--branch NAME` to select an existing local or unique remote branch before r
 
 By default, the loop pushes after each successful cycle that creates a commit. Pass `--no-push` to keep commits local.
 
+Pass `--pr-each-cycle` to create or reuse a GitHub pull request or GitLab merge request after each successful cycle. Pass `--merge-pr-each-cycle` to create and merge it immediately. PR/MR automation requires an authenticated `gh` or `glab` CLI, a configured remote, pushing enabled, and a work branch that is different from the base branch.
+
 Build-loop logs and lock files are kept outside the repository by default:
 
 ```text
@@ -137,6 +145,7 @@ The loop still stops if:
 * the agent or recovery run leaves a dirty working tree
 * no new commit was created by a successful implementation cycle
 * upstream changes during the cycle
+* configured PR/MR creation or merge fails
 * `AUTOMATION_STATUS: DONE` is set at the top level of `BUILD_TICKETS.md`
 
 ## Quick start
@@ -179,6 +188,12 @@ Run many cycles. Each successful cycle is pushed by default:
 
 ```bash
 scripts/build-loop.sh --max-cycles 40
+```
+
+Create and merge a PR/MR for each successful cycle:
+
+```bash
+scripts/build-loop.sh --branch feature/autonomous-build --merge-pr-each-cycle --pr-base main --max-cycles 40
 ```
 
 Run without pushing:

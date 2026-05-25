@@ -186,3 +186,23 @@ git_branch_push_current() {
   pp_hint "Create or add a remote, choose a different push remote, or rerun with --no-push."
   return 1
 }
+
+git_branch_push_current_to_remote() {
+  local remote_name="${1:-origin}"
+  local current_branch
+
+  current_branch="$(git branch --show-current 2>/dev/null || true)"
+  if [[ -z "$current_branch" ]]; then
+    pp_error "Cannot push a detached HEAD to a named PR branch."
+    return 1
+  fi
+
+  if ! git remote get-url "$remote_name" >/dev/null 2>&1; then
+    pp_error "Remote '$remote_name' does not exist."
+    pp_hint "Create or add the remote, choose a different remote, or rerun with --no-push."
+    return 1
+  fi
+
+  pp_cmd "git push -u $remote_name $current_branch"
+  git push -u "$remote_name" "$current_branch"
+}

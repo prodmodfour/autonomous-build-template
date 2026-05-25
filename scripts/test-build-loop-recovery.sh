@@ -32,6 +32,7 @@ create_fixture() {
     cp "$REPO_ROOT/scripts/build-loop.sh" scripts/build-loop.sh
     cp "$REPO_ROOT/scripts/lib/pretty-print.sh" scripts/lib/pretty-print.sh
     cp "$REPO_ROOT/scripts/lib/git-branch.sh" scripts/lib/git-branch.sh
+    cp "$REPO_ROOT/scripts/lib/pull-request.sh" scripts/lib/pull-request.sh
 
     cat > scripts/quality-gate.sh <<'QUALITY_GATE'
 #!/usr/bin/env bash

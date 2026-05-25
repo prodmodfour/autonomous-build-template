@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/pretty-print.sh"
 # shellcheck source=scripts/lib/git-branch.sh
 source "$SCRIPT_DIR/lib/git-branch.sh"
+# shellcheck source=scripts/lib/pull-request.sh
+source "$SCRIPT_DIR/lib/pull-request.sh"
 
 usage() {
   cat <<'USAGE'
@@ -22,20 +24,30 @@ Each cycle:
 * updates BUILD_NOTES.md and BUILD_TICKETS.md
 * commits the completed work
 * pushes the new commit unless --no-push is used
+* optionally creates or creates-and-merges a PR/MR for the new commit
 * leaves the working tree clean
 
 Options:
---max-cycles N     Number of cycles to run. Default: 1.
---sleep SECONDS    Pause between successful cycles. Default: 0.
---no-push          Do not push after successful cycles. By default, each new commit is pushed.
---push             Push after successful cycles (default; kept for compatibility).
---branch NAME      Select an existing local branch, or a unique remote branch, before running.
+--max-cycles N       Number of cycles to run. Default: 1.
+--sleep SECONDS      Pause between successful cycles. Default: 0.
+--no-push            Do not push after successful cycles. By default, each new commit is pushed.
+--push               Push after successful cycles (default; kept for compatibility).
+--branch NAME        Select an existing local branch, or a unique remote branch, before running.
 --create-branch NAME
-                   Create and select a new branch before running.
---branch-start REF Start point for --create-branch. Default: HEAD.
---allow-ahead      Allow starting when branch is already ahead of upstream (default; kept for compatibility).
---allow-template   Allow running even if PROJECT_BRIEF.md is still marked uncustomised.
--h, --help         Show this help.
+                     Create and select a new branch before running.
+--branch-start REF   Start point for --create-branch. Default: HEAD.
+--pr-each-cycle      Create or reuse a GitHub PR or GitLab MR after each successful cycle.
+--create-pr          Alias for --pr-each-cycle.
+--merge-pr-each-cycle
+                     Create and merge a PR/MR after each successful cycle.
+--merge-pr           Alias for --merge-pr-each-cycle.
+--no-pr              Disable PR/MR automation (default).
+--pr-provider VALUE  PR provider: auto, github, or gitlab. Default: auto.
+--pr-base NAME       PR/MR base or target branch. Default: detected remote default branch.
+--pr-remote NAME     Remote used for PR/MR push and base detection. Default: origin.
+--allow-ahead        Allow starting when branch is already ahead of upstream (default; kept for compatibility).
+--allow-template     Allow running even if PROJECT_BRIEF.md is still marked uncustomised.
+-h, --help           Show this help.
 
 Environment:
 AUTONOMOUS_BUILD_LOOP_STATE_DIR
@@ -61,6 +73,12 @@ BRANCH_START_SET=0
 ALLOW_AHEAD=1
 ALLOW_TEMPLATE=0
 AGENT_RETRY_SECONDS="${AUTONOMOUS_BUILD_RETRY_SECONDS:-600}"
+PR_MODE="none"
+PR_PROVIDER="auto"
+PR_REMOTE_NAME="origin"
+PR_BASE_BRANCH=""
+PR_RESOLVED_PROVIDER=""
+PR_RESOLVED_BASE_BRANCH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -122,6 +140,45 @@ while [[ $# -gt 0 ]]; do
       BRANCH_START_SET=1
       shift 2
       ;;
+    --pr-each-cycle|--create-pr)
+      PR_MODE="create"
+      shift
+      ;;
+    --merge-pr-each-cycle|--merge-pr)
+      PR_MODE="merge"
+      shift
+      ;;
+    --no-pr)
+      PR_MODE="none"
+      shift
+      ;;
+    --pr-provider)
+      if [[ $# -lt 2 ]]; then
+        pp_error "--pr-provider requires a value"
+        usage >&2
+        exit 2
+      fi
+      PR_PROVIDER="$2"
+      shift 2
+      ;;
+    --pr-base)
+      if [[ $# -lt 2 ]]; then
+        pp_error "--pr-base requires a value"
+        usage >&2
+        exit 2
+      fi
+      PR_BASE_BRANCH="$2"
+      shift 2
+      ;;
+    --pr-remote)
+      if [[ $# -lt 2 ]]; then
+        pp_error "--pr-remote requires a value"
+        usage >&2
+        exit 2
+      fi
+      PR_REMOTE_NAME="$2"
+      shift 2
+      ;;
     --allow-ahead)
       ALLOW_AHEAD=1
       shift
@@ -163,6 +220,32 @@ if (( BRANCH_START_SET == 1 )) && [[ -z "$CREATE_BRANCH" ]]; then
   exit 2
 fi
 
+case "$PR_MODE" in
+  none|create|merge) ;;
+  *)
+    pp_error "Internal error: invalid PR mode: $PR_MODE"
+    exit 2
+    ;;
+esac
+
+pr_validate_provider "$PR_PROVIDER" || exit $?
+
+if [[ "$PR_MODE" != "none" && "$PUSH_AFTER" == "0" ]]; then
+  pp_error "PR/MR automation requires pushing; remove --no-push or remove PR options."
+  exit 2
+fi
+
+if [[ -z "$PR_REMOTE_NAME" ]]; then
+  pp_error "--pr-remote must not be empty"
+  exit 2
+fi
+
+if ! [[ "$PR_REMOTE_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  pp_error "Invalid PR remote name: $PR_REMOTE_NAME"
+  pp_hint "Use letters, numbers, dots, underscores, or dashes."
+  exit 2
+fi
+
 REQUIRED_FILES=(
   AGENTS.md
   PROJECT_BRIEF.md
@@ -172,6 +255,7 @@ REQUIRED_FILES=(
   scripts/run-agent.sh
   scripts/lib/pretty-print.sh
   scripts/lib/git-branch.sh
+  scripts/lib/pull-request.sh
 )
 
 BUILD_LOOP_STATE_DIR=""
@@ -206,6 +290,7 @@ Your task in this run:
   * blockers, if any
   * next recommended ticket
 * Commit the completed ticket with a conventional commit message.
+* Do not create or merge PRs/MRs; the outer build loop handles that when configured.
 * Leave the working tree clean.
 
 If you cannot safely complete the ticket:
@@ -483,6 +568,86 @@ refuse_if_remote_advanced() {
   fi
 }
 
+configure_pr_automation() {
+  if [[ "$PR_MODE" == "none" ]]; then
+    return 0
+  fi
+
+  pp_section "PR/MR setup"
+
+  pr_require_remote "$PR_REMOTE_NAME" || exit $?
+
+  PR_RESOLVED_PROVIDER="$(pr_resolve_provider "$PR_PROVIDER" "$PR_REMOTE_NAME")" || exit $?
+
+  pr_require_provider_cli "$PR_RESOLVED_PROVIDER" || exit $?
+
+  if [[ -n "$PR_BASE_BRANCH" ]]; then
+    git_branch_validate_name "$PR_BASE_BRANCH" "PR base branch" || exit $?
+    PR_RESOLVED_BASE_BRANCH="$PR_BASE_BRANCH"
+  else
+    PR_RESOLVED_BASE_BRANCH="$(pr_detect_base_branch "$PR_REMOTE_NAME")" || exit $?
+  fi
+
+  git_branch_validate_name "$PR_RESOLVED_BASE_BRANCH" "PR base branch" || exit $?
+  pr_validate_current_branch "$PR_RESOLVED_BASE_BRANCH" || exit $?
+
+  pp_kv "Provider" "$PR_RESOLVED_PROVIDER"
+  pp_kv "Remote" "$PR_REMOTE_NAME"
+  pp_kv "Base branch" "$PR_RESOLVED_BASE_BRANCH"
+  pp_kv "Mode" "$PR_MODE"
+}
+
+build_pr_body() {
+  local context="$1"
+  local head_sha="$2"
+  local current_branch="$3"
+
+  cat <<BODY
+Automated autonomous build update.
+
+Context: $context
+Branch: $current_branch
+Commit: $head_sha
+Base: $PR_RESOLVED_BASE_BRANCH
+
+Created by scripts/build-loop.sh.
+BODY
+}
+
+publish_current_commit() {
+  local context="$1"
+  local head_sha="$2"
+  local current_branch
+  local pr_title
+  local pr_body
+
+  if (( PUSH_AFTER == 1 )); then
+    if [[ "$PR_MODE" == "none" ]]; then
+      pp_section "Push"
+      git_branch_push_current origin
+    else
+      pp_section "Push"
+      git_branch_push_current_to_remote "$PR_REMOTE_NAME"
+    fi
+  fi
+
+  if [[ "$PR_MODE" == "none" ]]; then
+    return 0
+  fi
+
+  current_branch="$(git branch --show-current 2>/dev/null || true)"
+  pr_title="$(git log -1 --pretty=%s)"
+  pr_body="$(build_pr_body "$context" "$head_sha" "$current_branch")"
+
+  pp_section "Create PR/MR"
+  pr_create_current_branch "$PR_RESOLVED_PROVIDER" "$PR_RESOLVED_BASE_BRANCH" "$pr_title" "$pr_body"
+
+  if [[ "$PR_MODE" == "merge" ]]; then
+    pp_section "Merge PR/MR"
+    pr_merge_current_branch "$PR_RESOLVED_PROVIDER" "$head_sha"
+  fi
+}
+
 split_current_ticket_after_context_failure() {
   local split_before_head
   local split_log
@@ -533,10 +698,7 @@ split_current_ticket_after_context_failure() {
 
   pp_success "Ticket split committed $(git rev-parse --short HEAD)"
 
-  if (( PUSH_AFTER == 1 )); then
-    pp_section "Push ticket split"
-    git_branch_push_current origin
-  fi
+  publish_current_commit "ticket split recovery" "$(git rev-parse HEAD)"
 }
 
 sanitize_state_component() {
@@ -612,6 +774,16 @@ pp_kv "Max cycles" "$MAX_CYCLES"
 pp_kv "Sleep" "${SLEEP_SECONDS}s"
 pp_kv "Agent retry sleep" "${AGENT_RETRY_SECONDS}s"
 pp_kv "Push after commit" "$(pp_on_off "$PUSH_AFTER")"
+pp_kv "PR/MR mode" "$PR_MODE"
+if [[ "$PR_MODE" != "none" ]]; then
+  pp_kv "PR/MR provider" "$PR_PROVIDER"
+  pp_kv "PR/MR remote" "$PR_REMOTE_NAME"
+  if [[ -n "$PR_BASE_BRANCH" ]]; then
+    pp_kv "PR/MR base" "$PR_BASE_BRANCH"
+  else
+    pp_kv "PR/MR base" "auto"
+  fi
+fi
 if [[ -n "$SELECT_BRANCH" ]]; then
   pp_kv "Select branch" "$SELECT_BRANCH"
 elif [[ -n "$CREATE_BRANCH" ]]; then
@@ -637,6 +809,7 @@ for file in "${REQUIRED_FILES[@]}"; do
 done
 
 require_customised_template
+configure_pr_automation
 
 cycle=0
 log_sequence=0
@@ -738,10 +911,7 @@ while (( cycle < MAX_CYCLES )); do
 
   pp_success "Cycle committed $(git rev-parse --short HEAD)"
 
-  if (( PUSH_AFTER == 1 )); then
-    pp_section "Push"
-    git_branch_push_current origin
-  fi
+  publish_current_commit "cycle $cycle/$MAX_CYCLES" "$after_head"
 
   automation_status="$(get_automation_status)"
   if [[ "$automation_status" == "DONE" ]]; then

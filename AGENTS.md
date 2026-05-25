@@ -30,6 +30,8 @@ When invoked by the build loop:
 11. Commit the completed ticket with a conventional commit message.
 12. Leave the working tree clean.
 
+The outer build loop handles pushing and optional PR/MR creation or merging when configured. Do not create or merge PRs/MRs from inside the agent run unless a ticket explicitly asks for it.
+
 ## If blocked
 
 If you cannot complete the ticket safely:

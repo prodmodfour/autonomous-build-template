@@ -134,7 +134,32 @@ scripts/build-loop.sh --max-cycles 20
 At the start of each cycle, the loop prints the current ticket it is working on.
 The loop pushes each successful cycle's commit by default.
 
-## 9. Run without pushing
+## 9. Create and merge PRs/MRs as the loop progresses
+
+Use `--pr-each-cycle` to create a GitHub pull request or GitLab merge request after a successful cycle commit. If an open PR/MR already exists for the work branch, later cycles reuse it and push more commits to it:
+
+```bash
+scripts/build-loop.sh --branch feature/autonomous-build --pr-each-cycle --pr-base main --max-cycles 20
+```
+
+Use `--merge-pr-each-cycle` to create and immediately merge each PR/MR:
+
+```bash
+scripts/build-loop.sh --branch feature/autonomous-build --merge-pr-each-cycle --pr-base main --max-cycles 20
+```
+
+PR/MR automation requires:
+
+* pushing enabled; do not combine it with `--no-push`
+* a configured remote, `origin` by default or `--pr-remote NAME`
+* an authenticated GitHub CLI (`gh`) or GitLab CLI (`glab`)
+* a work branch that is different from the base/target branch
+
+The provider is auto-detected from the remote URL when possible. Otherwise pass `--pr-provider github` or `--pr-provider gitlab`. The base branch is detected from the remote default branch when possible. Otherwise pass `--pr-base main`, `--pr-base master`, or another target branch.
+
+The merge mode asks the platform CLI for a normal merge and keeps the source branch so the next autonomous cycle can continue on it. Branch protection, required checks, merge conflicts, repository merge-strategy settings, or missing permissions can still stop the loop.
+
+## 10. Run without pushing
 
 ```bash
 scripts/build-loop.sh --max-cycles 20 --no-push
@@ -142,7 +167,7 @@ scripts/build-loop.sh --max-cycles 20 --no-push
 
 The legacy `--push` flag is still accepted, but pushing is already enabled by default.
 
-## 10. Build-loop logs and lock files
+## 11. Build-loop logs and lock files
 
 Active build-loop state is kept outside the repository by default:
 
@@ -158,7 +183,7 @@ Override the per-repository state directory when needed:
 AUTONOMOUS_BUILD_LOOP_STATE_DIR=/path/to/build-loop-state scripts/build-loop.sh --max-cycles 20
 ```
 
-## 11. Automatic agent failure recovery
+## 12. Automatic agent failure recovery
 
 If an implementation run fails with a token or context-length error, the loop asks the configured Pi agent wrapper to split the current lowest-numbered `TODO` or `IN_PROGRESS` ticket into two smaller tickets. The split is committed, and the same cycle is retried so `--max-cycles 1` can still complete one implementation cycle after recovery.
 
@@ -172,13 +197,13 @@ AUTONOMOUS_BUILD_RETRY_SECONDS=60 scripts/build-loop.sh --max-cycles 20
 
 Use `AUTONOMOUS_BUILD_RETRY_SECONDS=0` for immediate retries in tests.
 
-## 12. If branch is already ahead
+## 13. If branch is already ahead
 
 Branches that are already ahead of upstream are allowed by default. The loop still refuses to start when the branch is behind upstream, and still stops if upstream advances during a cycle.
 
 The legacy `--allow-ahead` flag is still accepted for older scripts, but it is no longer required.
 
-## 13. Changing the agent
+## 14. Changing the agent
 
 The main build loop is agent-agnostic.
 
@@ -196,7 +221,7 @@ pi --no-session -p @AGENTS.md @PROJECT_BRIEF.md @BUILD_TICKETS.md @BUILD_NOTES.m
 
 It intentionally does not pass model or thinking-level flags.
 
-## 14. Completion
+## 15. Completion
 
 The final ticket should set the top-level status in `BUILD_TICKETS.md` to:
 
